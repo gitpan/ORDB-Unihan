@@ -2,19 +2,19 @@ NAME
     ORDB::Unihan - An ORM for the published Unihan database
 
 VERSION
-    version 0.01
+    version 0.02
 
 SYNOPSIS
         use ORDB::Unihan;
-
+    
         # dbh way
         my $dbh = ORDB::Unihan->dbh;
         my $sql = 'SELECT val FROM unihan WHERE hex = 3402 AND type="RSUnicode"';
         my $sth = $dbh->prepare($sql);
-
+    
         # simple way
         ORDB::Unihan->selectrow_array($statement);
-
+    
         # or ORLite way
         my $vals = ORDB::Unihan::Unihan->select(
             'where hex = ?', '3402'
@@ -54,8 +54,15 @@ AUTHOR
       Fayland Lam <fayland@gmail.com>
 
 COPYRIGHT AND LICENSE
-    This software is copyright (c) 2009 by Fayland Lam.
+    This software is copyright (c) 2010 by Fayland Lam.
 
     This is free software; you can redistribute it and/or modify it under
-    the same terms as perl itself.
+    the same terms as the Perl 5 programming language system itself.
+
+POD ERRORS
+    Hey! The above document had some coding errors, which are explained
+    below:
+
+    Around line 267:
+        You forgot a '=back' before '=head1'
 

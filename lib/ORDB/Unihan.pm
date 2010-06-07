@@ -1,5 +1,8 @@
 package ORDB::Unihan;
-our $VERSION = '0.01';
+
+BEGIN {
+    $ORDB::Unihan::VERSION = '0.02';
+}
 
 # ABSTRACT: An ORM for the published Unihan database
 
@@ -78,8 +81,8 @@ sub import {
         if ( open( my $fh, '<', $last_mod_file ) ) {
             flock( $fh, 1 );
             $last_mod_local = <$fh>;
-            $last_mod_local ||= 0;
             chomp($last_mod_local);
+            $last_mod_local ||= 0;
             close($fh);
         }
 
@@ -89,7 +92,7 @@ sub import {
             $need_refetch = 0;
         }
         else {
-            print
+            print STDERR
               "Unihan.zip last-modified $last_mod, we have $last_mod_local\n"
               if $DEBUG;
             open( my $fh, '>', $last_mod_file );
@@ -109,7 +112,7 @@ sub import {
     # refetch the .zip
     my $regenerated_sqlite = 0;
     if ( $need_refetch or !-e $zip_path ) {
-        print "Mirror $url to $zip_path\n" if $DEBUG;
+        print STDERR "Mirror $url to $zip_path\n" if $DEBUG;
 
         # Fetch the archive
         my $response = $useragent->mirror( $url => $zip_path );
@@ -120,23 +123,25 @@ sub import {
     }
 
     # Extract .txt file
-    my $txt_path = File::Spec->catfile( $dir, 'Unihan.txt' );
+    my $old_txt_file = File::Spec->catfile( $dir, 'Unihan.txt' );
+    unlink($old_txt_file) if -e $old_txt_file;
+    my $txt_path = File::Spec->catfile( $dir, 'Unihan_Readings.txt' );
     if ( $regenerated_sqlite or !-e $txt_path ) {
-        print "Extract $zip_path to $dir\n" if $DEBUG;
+        print STDERR "Extract $zip_path to $dir\n" if $DEBUG;
         require Archive::Extract;
         my $ae = Archive::Extract->new( archive => $zip_path );
         my $ok = $ae->extract( to => $dir );
         unless ($ok) {
             Carp::croak("Error: Failed to read .zip");
         }
-        unless ( -e File::Spec->catfile( $dir, 'Unihan.txt' ) ) {
+        unless ( -e $txt_path ) {
             Carp::croak("Error: Failed to extract .zip");
         }
-
     }
 
     # regenerate the .sqlite
     if ( $regenerated_sqlite or !-e $db ) {
+        unlink($db);
         my $dbh = DBI->connect(
             "DBI:SQLite:$db",
             undef, undef,
@@ -146,7 +151,6 @@ sub import {
             }
         );
         $dbh->do(<<'SQL');
-        
   CREATE TABLE unihan (
     "hex" CHAR(5) NOT NULL,
     "type" VARCHAR(18) NOT NULL,
@@ -157,18 +161,27 @@ SQL
         my $sql =
           'INSERT INTO "unihan" ("hex", "type", "val") VALUES (?, ?, ?)';
         my $sth = $dbh->prepare($sql);
-        open( my $fh, '<', $txt_path );
-        flock( $fh, 1 );
-        while ( my $line = <$fh> ) {
-            next if ( $line =~ /^\#/ );      # comment line
-            next if ( $line =~ /^\s+$/ );    # blank line
-            chomp($line);
-            my ( $hex, $type, $val ) = split( /\t/, $line, 3 );
-            $hex  =~ s/^U\+//;
-            $type =~ s/^k//;
-            $val  =~ s/(^\s|\s+)//g;
-            $sth->execute( $hex, $type, $val )
-              or die "$dbh:errstr $type, $hex, $val";
+
+        opendir( my $fdir, $dir );
+        my @files = grep { /.txt$/ } readdir($fdir);
+        closedir($fdir);
+        foreach my $file (@files) {
+            next if $file eq 'last_mod.txt';
+            print STDERR "Populate $dir/$file\n" if $DEBUG;
+            open( my $fh, '<:utf8', "$dir/$file" );
+            flock( $fh, 1 );
+            while ( my $line = <$fh> ) {
+                next if ( $line =~ /^\#/ );      # comment line
+                next if ( $line =~ /^\s+$/ );    # blank line
+                chomp($line);
+                my ( $hex, $type, $val ) = split( /\t/, $line, 3 );
+                $hex  =~ s/^U\+//;
+                $type =~ s/^k//;
+                $val  =~ s/(^\s|\s+)//g;
+                $sth->execute( $hex, $type, $val )
+                  or die "$dbh:errstr $type, $hex, $val";
+            }
+            close($fh);
         }
     }
 
@@ -183,26 +196,28 @@ SQL
 1;
 __END__
 
+=pod
+
 =head1 NAME
 
 ORDB::Unihan - An ORM for the published Unihan database 
 
 =head1 VERSION
 
-version 0.01
+version 0.02
 
 =head1 SYNOPSIS
 
     use ORDB::Unihan;
-
+    
     # dbh way
     my $dbh = ORDB::Unihan->dbh;
     my $sql = 'SELECT val FROM unihan WHERE hex = 3402 AND type="RSUnicode"';
     my $sth = $dbh->prepare($sql);
-
+    
     # simple way
     ORDB::Unihan->selectrow_array($statement);
-
+    
     # or ORLite way
     my $vals = ORDB::Unihan::Unihan->select(
         'where hex = ?', '3402'
@@ -249,17 +264,15 @@ one of Cangjie, Cantonese, CihaiT, Cowles, Definition, HanYu, IRGHanyuDaZidian, 
 
 the value for C<hex> and C<type>
 
-=back
-
 =head1 AUTHOR
 
   Fayland Lam <fayland@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2009 by Fayland Lam.
+This software is copyright (c) 2010 by Fayland Lam.
 
 This is free software; you can redistribute it and/or modify it under
-the same terms as perl itself.
+the same terms as the Perl 5 programming language system itself.
 
-=pod 
+=cut
