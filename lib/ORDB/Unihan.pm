@@ -1,7 +1,6 @@
 package ORDB::Unihan;
-
-BEGIN {
-    $ORDB::Unihan::VERSION = '0.02';
+{
+    $ORDB::Unihan::VERSION = '0.03';
 }
 
 # ABSTRACT: An ORM for the published Unihan database
@@ -150,6 +149,10 @@ sub import {
                 PrintError => 1,
             }
         );
+        $dbh->do('PRAGMA synchronous=OFF');
+        $dbh->do('PRAGMA count_changes=OFF');
+        $dbh->do('PRAGMA journal_mode=MEMORY');
+        $dbh->do('PRAGMA temp_store=MEMORY');
         $dbh->do(<<'SQL');
   CREATE TABLE unihan (
     "hex" CHAR(5) NOT NULL,
@@ -175,9 +178,9 @@ SQL
                 next if ( $line =~ /^\s+$/ );    # blank line
                 chomp($line);
                 my ( $hex, $type, $val ) = split( /\t/, $line, 3 );
-                $hex  =~ s/^U\+//;
+                $hex =~ s/^U\+//;
                 $type =~ s/^k//;
-                $val  =~ s/(^\s|\s+)//g;
+                $val =~ s/(^\s|\s+)//g;
                 $sth->execute( $hex, $type, $val )
                   or die "$dbh:errstr $type, $hex, $val";
             }
@@ -194,30 +197,31 @@ SQL
 }
 
 1;
+
 __END__
 
 =pod
 
 =head1 NAME
 
-ORDB::Unihan - An ORM for the published Unihan database 
+ORDB::Unihan - An ORM for the published Unihan database
 
 =head1 VERSION
 
-version 0.02
+version 0.03
 
 =head1 SYNOPSIS
 
     use ORDB::Unihan;
-    
+
     # dbh way
     my $dbh = ORDB::Unihan->dbh;
     my $sql = 'SELECT val FROM unihan WHERE hex = 3402 AND type="RSUnicode"';
     my $sth = $dbh->prepare($sql);
-    
+
     # simple way
     ORDB::Unihan->selectrow_array($statement);
-    
+
     # or ORLite way
     my $vals = ORDB::Unihan::Unihan->select(
         'where hex = ?', '3402'
@@ -266,11 +270,11 @@ the value for C<hex> and C<type>
 
 =head1 AUTHOR
 
-  Fayland Lam <fayland@gmail.com>
+Fayland Lam <fayland@gmail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2010 by Fayland Lam.
+This software is copyright (c) 2013 by Fayland Lam.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.
